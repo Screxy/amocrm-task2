@@ -6,7 +6,11 @@ use AmoCRM\Client\AmoCRMApiClient;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use AmoCRM\Helpers\EntityTypesInterface;
-
+use AmoCRM\Collections\CustomFieldsValuesCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\SelectCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\MultitextCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\MultitextCustomFieldValueCollection;
 use League\OAuth2\Client\Token\AccessToken;
 use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Collections\Leads\LeadsCollection;
@@ -58,12 +62,16 @@ class AmoCrmController extends Controller
     {
         $apiClient = $this->apiClient;
         $contactService = $apiClient->contacts();
-        $contactsCollection = $contactService->get();
         $contact = $contactService->getOne('11259657');
-        $contactsCustomFields = $apiClient->customFields(EntityTypesInterface::CONTACTS)->get()->toArray();
-        // var_dump($contactsCustomFields);
-        var_dump($contact->getCustomFieldsValues());
-        // var_dump($contactsCollection->last()->getCustomFieldsValues());
+        $contactCustomFields = $contact->getCustomFieldsValues();
+        //изменить поле телефон
+        $contactCustomFields->getBy('fieldCode', 'PHONE')->setValues(
+            (new MultitextCustomFieldValueCollection())->add(
+                (new MultitextCustomFieldValueModel())->setValue('71291922')
+            )
+        );
+        $contact->setCustomFieldsValues($contactCustomFields);
+        $apiClient->contacts()->updateOne($contact);
         return view("amo.main");
     }
     public function store(Request $request)
@@ -143,5 +151,31 @@ class AmoCrmController extends Controller
         } else {
             exit('Invalid access token ' . var_export($accessToken, true));
         }
+    }
+    private function setContactNumber(){
+
+    }
+    private function setContactGender()
+    {
+        $apiClient = $this->apiClient;
+        $contactService = $apiClient->contacts();
+        $contactsCollection = $contactService->get();
+        $customFieldsService = $apiClient->customFields(EntityTypesInterface::CONTACTS);
+        $enums = $customFieldsService->get()->getBy('id', 1345279)->getEnums();
+        var_dump($enums);
+        $contact = $contactService->getOne('11259657');
+        $contactsCustomFieldsCollection = $contact->getCustomFieldsValues();
+        $contactCF = $contactsCustomFieldsCollection->getBy('fieldId', 1345279)->setValues(
+            (new SelectCustomFieldValueCollection())
+                ->add(
+                    (new SelectCustomFieldValueModel())
+                        ->setValue($enums[0])
+                )
+        );
+        // var_dump($contactsCustomFieldsCollection);
+        var_dump($contactCF);
+        // var_dump($contactCF->getValues());
+        // var_dump($contactCF2);
+        // var_dump($contactsCollection->last()->getCustomFieldsValues());
     }
 }
