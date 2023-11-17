@@ -6,7 +6,6 @@ use AmoCRM\Client\AmoCRMApiClient;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use AmoCRM\Helpers\EntityTypesInterface;
-use AmoCRM\Collections\CustomFieldsValuesCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\SelectCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\MultitextCustomFieldValueModel;
@@ -15,8 +14,7 @@ use AmoCRM\Models\CustomFieldsValues\ValueModels\NumericCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\NumericCustomFieldValueCollection;
 use League\OAuth2\Client\Token\AccessToken;
 use AmoCRM\Collections\ContactsCollection;
-use AmoCRM\Collections\Leads\LeadsCollection;
-use AmoCRM\Models\CompanyModel;
+use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\LeadModel;
 
@@ -62,27 +60,18 @@ class AmoCrmController extends Controller
     }
     public function index()
     {
-        $apiClient = $this->apiClient;
-        $contactService = $apiClient->contacts();
-        $contact = $contactService->getOne('11259657');
-        // $this->setContactNumber($contact, 79207499226);
-        // $this->setContactEmail($contact, 'dvbvladis@mail.ru');
-        // $this->setContactName($contact, 'Владислав', 'Данцаранов');
-        // $this->setContactGender($contact, 'Мужской');
-        // $contact = $this->setContactAge($contact, 21);
-        // $this->apiClient->contacts()->updateOne($contact);
         return view("amo.main");
     }
     public function store(Request $request)
     {
-        $request->validate([
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
-            'age' => 'required|numeric',
-            'gender' => 'required|string',
-            'phone' => 'required|numeric|digits:11',
-            'email' => 'required|email'
-        ]);
+        // $request->validate([
+        //     'first_name' => 'required|string',
+        //     'last_name' => 'required|string',
+        //     'age' => 'required|numeric',
+        //     'gender' => 'required|string',
+        //     'phone' => 'required|numeric|digits:11',
+        //     'email' => 'required|email'
+        // ]);
         $first_name = $request->input('first_name');
         $last_name = $request->input('last_name');
         $age = $request->input('age');
@@ -92,17 +81,40 @@ class AmoCrmController extends Controller
 
         $apiClient = $this->apiClient;
         $contactService = $apiClient->contacts();
-        
-        $contact = new ContactModel();
-        //установить кастомные поля как у других контактов
-        $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
-        
-        $this->setContactNumber($contact, $phone);
-        $this->setContactEmail($contact, $email);
-        $this->setContactName($contact, $first_name, $last_name);
-        $this->setContactAge($contact, $age);
-        $this->setContactGender($contact, $gender);
-        $apiClient->contacts()->addOne($contact);
+        $leadsService = $apiClient->leads();
+
+        // $contact = new ContactModel();
+        // //установить кастомные поля как у других контактов
+        // $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
+
+        // $this->setContactName($contact, $first_name, $last_name);
+        // $this->setContactAge($contact, $age);
+        // $this->setContactGender($contact, $gender);
+        // $this->setContactNumber($contact, $phone);
+        // $this->setContactEmail($contact, $email);
+        // $apiClient->contacts()->addOne($contact);
+        $contact = $contactService->getOne('11259657');
+        $lead = new LeadModel();
+        $lead->setName('Тестовая сделка из Api2')
+            ->setPrice(999)
+            ->setContacts(
+                (new ContactsCollection())
+                    ->add(
+                        $contact
+                    )
+            )->setResponsibleUserId($this->getRandomUserId());
+        $leadsService->addOne($lead);
+
+        $tasksService = $apiClient->tasks();
+        $task = new TaskModel();
+        $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
+            ->setText('Новая задач из Api')
+            ->setCompleteTill(mktime(10, 0, 0, 10, 3, 2024))
+            ->setEntityType(EntityTypesInterface::LEADS)
+            ->setEntityId($lead->getId())
+            ->setDuration(30 * 60 * 60) //30 минут
+            ->setResponsibleUserId($lead->getResponsibleUserId());
+        $tasksService->addOne($task);
 
         return response()->json([
             'message' => 'ok',
@@ -212,5 +224,13 @@ class AmoCrmController extends Controller
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
         // $this->apiClient->contacts()->updateOne($contact);
+    }
+    private function getRandomUserId()
+    {
+        $apiClient = $this->apiClient;
+        $usersService = $apiClient->users();
+        $users = $usersService->get()->toArray();
+        $index = random_int(0, count($users) - 1);
+        return $users[$index]['id'];
     }
 }
