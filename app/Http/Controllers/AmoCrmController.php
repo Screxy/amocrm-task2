@@ -11,6 +11,8 @@ use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\SelectCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\MultitextCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\MultitextCustomFieldValueCollection;
+use AmoCRM\Models\CustomFieldsValues\ValueModels\NumericCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\ValueCollections\NumericCustomFieldValueCollection;
 use League\OAuth2\Client\Token\AccessToken;
 use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Collections\Leads\LeadsCollection;
@@ -63,15 +65,11 @@ class AmoCrmController extends Controller
         $apiClient = $this->apiClient;
         $contactService = $apiClient->contacts();
         $contact = $contactService->getOne('11259657');
-        $contactCustomFields = $contact->getCustomFieldsValues();
-        //изменить поле телефон
-        $contactCustomFields->getBy('fieldCode', 'PHONE')->setValues(
-            (new MultitextCustomFieldValueCollection())->add(
-                (new MultitextCustomFieldValueModel())->setValue('71291922')
-            )
-        );
-        $contact->setCustomFieldsValues($contactCustomFields);
-        $apiClient->contacts()->updateOne($contact);
+        // $this->setContactNumber($contact, 79207499226);
+        // $this->setContactEmail($contact, 'dvbvladis@mail.ru');
+        // $this->setContactName($contact, 'Владислав', 'Данцаранов');
+        // $this->setContactAge($contact, 18);
+        // $this->setContactGender($contact, 'Мужской');
         return view("amo.main");
     }
     public function store(Request $request)
@@ -81,7 +79,7 @@ class AmoCrmController extends Controller
             'last_name' => 'required|string',
             'age' => 'required|numeric',
             'gender' => 'required|string',
-            'phone' => 'required|numeric|digits:10',
+            'phone' => 'required|numeric|digits:11',
             'email' => 'required|email'
         ]);
         $first_name = $request->input('first_name');
@@ -93,17 +91,15 @@ class AmoCrmController extends Controller
 
         $apiClient = $this->apiClient;
         $contact = new ContactModel();
-        $contact->setName("$first_name $last_name")->setCustomFieldsValues();
-
+        $this->setContactNumber($contact, $phone);
+        $this->setContactEmail($contact, $email);
+        $this->setContactName($contact, $first_name, $last_name);
+        $this->setContactAge($contact, $age);
+        $this->setContactGender($contact, $gender);
+        $apiClient->contacts()->create($contact);
         return response()->json([
             'message' => 'ok',
-            'first_name' => "$first_name",
-            'last_name' => "$last_name",
-            'age' => "$age",
-            'gender' => "$gender",
-            'phone' => "$phone",
-            'email' => "$email",
-        ], 200);
+        ], 201);
     }
     private function saveToken(array $accessToken)
     { {
@@ -152,30 +148,82 @@ class AmoCrmController extends Controller
             exit('Invalid access token ' . var_export($accessToken, true));
         }
     }
-    private function setContactNumber(){
-
-    }
-    private function setContactGender()
+    private function setContactNumber(ContactModel $contact, int $value)
     {
-        $apiClient = $this->apiClient;
-        $contactService = $apiClient->contacts();
-        $contactsCollection = $contactService->get();
-        $customFieldsService = $apiClient->customFields(EntityTypesInterface::CONTACTS);
-        $enums = $customFieldsService->get()->getBy('id', 1345279)->getEnums();
-        var_dump($enums);
-        $contact = $contactService->getOne('11259657');
-        $contactsCustomFieldsCollection = $contact->getCustomFieldsValues();
-        $contactCF = $contactsCustomFieldsCollection->getBy('fieldId', 1345279)->setValues(
-            (new SelectCustomFieldValueCollection())
-                ->add(
-                    (new SelectCustomFieldValueModel())
-                        ->setValue($enums[0])
-                )
+        $contactCustomFields = $contact->getCustomFieldsValues();
+        //изменить поле телефон
+        $contactCustomFields->getBy('fieldCode', 'PHONE')->setValues(
+            (new MultitextCustomFieldValueCollection())->add(
+                (new MultitextCustomFieldValueModel())->setValue($value)
+            )
         );
-        // var_dump($contactsCustomFieldsCollection);
-        var_dump($contactCF);
-        // var_dump($contactCF->getValues());
-        // var_dump($contactCF2);
-        // var_dump($contactsCollection->last()->getCustomFieldsValues());
+        $contact->setCustomFieldsValues($contactCustomFields);
+        return $contact;
+        // $this->apiClient->contacts()->updateOne($contact);
+    }
+    private function setContactEmail(ContactModel $contact, string $value)
+    {
+        $contactCustomFields = $contact->getCustomFieldsValues();
+        //изменить поле email
+        $contactCustomFields->getBy('fieldCode', 'EMAIL')->setValues(
+            (new MultitextCustomFieldValueCollection())->add(
+                (new MultitextCustomFieldValueModel())->setValue($value)
+            )
+        );
+        $contact->setCustomFieldsValues($contactCustomFields);
+        return $contact;
+        // $this->apiClient->contacts()->updateOne($contact);
+    }
+    private function setContactName(ContactModel $contact, string $first_name, string $last_name)
+    {
+        $contact->setFirstName($first_name)->setLastName($last_name);
+        return $contact;
+        // $this->apiClient->contacts()->updateOne($contact);
+    }
+    private function setContactAge(ContactModel $contact, int $value)
+    {
+        $contactCustomFields = $contact->getCustomFieldsValues();
+        //изменить поле email
+        $contactCustomFields->getBy('fieldName', 'Возраст')->setValues(
+            (new NumericCustomFieldValueCollection())->add(
+                (new NumericCustomFieldValueModel())->setValue($value)
+            )
+        );
+        $contact->setCustomFieldsValues($contactCustomFields);
+        return $contact;
+        // $this->apiClient->contacts()->updateOne($contact);
+    }
+    private function setContactGender(ContactModel $contact, string $value)
+    {
+        $contactCustomFields = $contact->getCustomFieldsValues();
+        var_dump($contactCustomFields);
+        //изменить поле email
+        $contactCustomFields->getBy('fieldName', 'Пол')->setValues(
+            (new SelectCustomFieldValueCollection())->add(
+                (new SelectCustomFieldValueModel())->setValue($value)
+            )
+        );
+        $contact->setCustomFieldsValues($contactCustomFields);
+        $this->apiClient->contacts()->updateOne($contact);
+        // $apiClient = $this->apiClient;
+        // $contactService = $apiClient->contacts();
+        // $contactsCollection = $contactService->get();
+        // $customFieldsService = $apiClient->customFields(EntityTypesInterface::CONTACTS);
+        // $enums = $customFieldsService->get()->getBy('id', 1345279)->getEnums();
+        // var_dump($enums);
+        // $contact = $contactService->getOne('11259657');
+        // $contactsCustomFieldsCollection = $contact->getCustomFieldsValues();
+        // $contactCF = $contactsCustomFieldsCollection->getBy('fieldId', 1345279)->setValues(
+        //     (new SelectCustomFieldValueCollection())
+        //         ->add(
+        //             (new SelectCustomFieldValueModel())
+        //                 ->setValue($enums[0])
+        //         )
+        // );
+        // // var_dump($contactsCustomFieldsCollection);
+        // var_dump($contactCF);
+        // // var_dump($contactCF->getValues());
+        // // var_dump($contactCF2);
+        // // var_dump($contactsCollection->last()->getCustomFieldsValues());
     }
 }

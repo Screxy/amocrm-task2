@@ -16,8 +16,8 @@
         <label>
             <span> Выберите пол </span>
             <select name="gender">
-                <option value="male">male</option>
-                <option value="female">female</option>
+                <option value="Мужской">Мужской</option>
+                <option value="Женский">Женский</option>
             </select>
         </label>
         <label>
