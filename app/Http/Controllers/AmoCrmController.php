@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use AmoCRM\Client\AmoCRMApiClient;
+use AmoCRM\Collections\CatalogElementsCollection;
+use AmoCRM\Models\ProductsSettingsModel;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use AmoCRM\Helpers\EntityTypesInterface;
@@ -17,6 +19,9 @@ use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\LeadModel;
+use AmoCRM\Collections\LinksCollection;
+use AmoCRM\Models\CompanyModel;
+use AmoCRM\Models\CatalogElementModel;
 
 class AmoCrmController extends Controller
 {
@@ -60,6 +65,27 @@ class AmoCrmController extends Controller
     }
     public function index()
     {
+        // $apiClient = $this->apiClient;
+        // $contactService = $apiClient->contacts();
+        // $leadsService = $apiClient->leads();
+        // $lead = $leadsService->getOne(6729965);
+        // $linkService = $apiClient->links('leads');
+        // $linksCollection = new LinksCollection();
+
+        // $catalogsService = $apiClient->catalogs();
+        // $catalogsCollection = $catalogsService->get();
+        // $catalog = $catalogsCollection->getBy('name', 'Товары');
+
+        // //сервис элементов товаров
+        // $catalogElementsService = $apiClient->catalogElements($catalog->getId());
+        // $catalogElement = new CatalogElementModel();
+        // $catalogElement->setName('Новый товар из Api');
+        // $catalogElementsService->addOne($catalogElement);
+        // //привязываем к сделке
+        // $links = new LinksCollection();
+        // $links->add($catalogElement);
+        // $apiClient->leads()->link($lead, $links);
+        // var_dump($catalogElementsService->get());
         return view("amo.main");
     }
     public function store(Request $request)
@@ -69,31 +95,34 @@ class AmoCrmController extends Controller
         //     'last_name' => 'required|string',
         //     'age' => 'required|numeric',
         //     'gender' => 'required|string',
-        //     'phone' => 'required|numeric|digits:11',
+        //     'phone' => 'required|numeric|digits:10',
         //     'email' => 'required|email'
         // ]);
-        $first_name = $request->input('first_name');
-        $last_name = $request->input('last_name');
-        $age = $request->input('age');
-        $gender = $request->input('gender');
-        $phone = $request->input('phone');
-        $email = $request->input('email');
+        // $first_name = $request->input('first_name');
+        // $last_name = $request->input('last_name');
+        // $age = $request->input('age');
+        // $gender = $request->input('gender');
+        // $phone = $request->input('phone');
+        // $email = $request->input('email');
 
         $apiClient = $this->apiClient;
         $contactService = $apiClient->contacts();
         $leadsService = $apiClient->leads();
+        $productsService = $apiClient->products();
 
         // $contact = new ContactModel();
         // //установить кастомные поля как у других контактов
-        // $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
-
+        // $contact->setCustomFieldsValues($contactService->getOne('11259657')->getCustomFieldsValues());
         // $this->setContactName($contact, $first_name, $last_name);
         // $this->setContactAge($contact, $age);
         // $this->setContactGender($contact, $gender);
         // $this->setContactNumber($contact, $phone);
         // $this->setContactEmail($contact, $email);
         // $apiClient->contacts()->addOne($contact);
+
+        // Для тестов, чтобы не создавать контакт
         $contact = $contactService->getOne('11259657');
+
         $lead = new LeadModel();
         $lead->setName('Тестовая сделка из Api2')
             ->setPrice(999)
@@ -109,13 +138,32 @@ class AmoCrmController extends Controller
         $task = new TaskModel();
         $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
             ->setText('Новая задач из Api')
-            ->setCompleteTill(mktime(10, 0, 0, 10, 3, 2024))
+            // TODO: Реализовать "только на «рабочее время» (пн-пт с 9 до 18)"
+            ->setCompleteTill(time() + (4 * 24 * 60 * 60))
             ->setEntityType(EntityTypesInterface::LEADS)
             ->setEntityId($lead->getId())
-            ->setDuration(30 * 60 * 60) //30 минут
             ->setResponsibleUserId($lead->getResponsibleUserId());
         $tasksService->addOne($task);
 
+        $catalogsService = $apiClient->catalogs();
+        $catalogsCollection = $catalogsService->get();
+        $catalog = $catalogsCollection->getBy('name', 'Товары');
+
+        //сервис элементов товаров
+        $catalogElementsService = $apiClient->catalogElements($catalog->getId());
+        $catalogElementCollection = new CatalogElementsCollection();
+        $catalogElement = new CatalogElementModel();
+        $catalogElement->setName('Новый товар из Api');
+        $catalogElement2 = new CatalogElementModel();
+        $catalogElement2->setName('Новый товар из Api 2');
+        $catalogElementCollection->add($catalogElement)->add($catalogElement2);
+        $catalogElementsService->add($catalogElementCollection);
+        
+        //привязываем товары к сделке
+        $links = new LinksCollection();
+        $links->add($catalogElement);
+        $links->add($catalogElement2);
+        $leadsService->link($lead, $links);
         return response()->json([
             'message' => 'ok',
         ], 201);
