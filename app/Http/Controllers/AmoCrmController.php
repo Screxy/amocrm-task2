@@ -69,83 +69,6 @@ class AmoCrmController extends Controller
     }
     public function index()
     {
-        $apiClient = $this->apiClient;
-        $contactService = $apiClient->contacts();
-        $leadsService = $apiClient->leads();
-
-        // $lead = $leadsService->getOne(6729965);
-        // $linkService = $apiClient->links('leads');
-        // $linksCollection = new LinksCollection();
-
-        // $catalogsService = $apiClient->catalogs();
-        // $catalogsCollection = $catalogsService->get();
-        // $catalog = $catalogsCollection->getBy('name', 'Товары');
-
-        // //сервис элементов товаров
-        // $catalogElementsService = $apiClient->catalogElements($catalog->getId());
-        // $catalogElement = new CatalogElementModel();
-        // $catalogElement->setName('Новый товар из Api');
-        // $catalogElementsService->addOne($catalogElement);
-        // //привязываем к сделке
-        // $links = new LinksCollection();
-        // $links->add($catalogElement);
-        // $apiClient->leads()->link($lead, $links);
-        // var_dump($catalogElementsService->get());
-
-        // пытался создать фильтр по номеру телефона, не получилось...
-        // $customFields = $contactService->getOne(11259657)->getCustomFieldsValues();
-        // $phoneField = $customFields->getBy('fieldCode', 'PHONE')->setValues(
-        //     (new MultitextCustomFieldValueCollection())
-        //         ->add(
-        //             (new MultitextCustomFieldValueModel())
-        //                 ->setEnum('WORK')
-        //                 ->setValue('9207499226')
-        //         )
-        // );
-        // $contactFilter = (new ContactsFilter())->setCustomFieldsValues(
-        //     [$phoneField]
-        // );
-        // var_dump($contactFilter->getCustomFieldsValues());
-        // $checkContact = $contactService->get($contactFilter);
-        // var_dump($checkContact);
-        // $phone = '9207499224';
-        // $checkContact = $contactService->get(null, ['leads']);
-        // $isContactDuplicate = false;
-        // foreach ($checkContact as $contactItem) {
-        //     //достать поле телефон
-        //     $contactPhone = $contactItem->getCustomFieldsValues()->getBy('fieldCode', 'PHONE')->getValues()->all()[0]->getValue();
-        //     $isContactDuplicate = $contactPhone === $phone;
-        //     if ($isContactDuplicate) {
-        //         $contact = $contactItem;
-        //         break;
-        //     }
-        // }
-        // //проверка на успешный статус сделок контакта
-        // $contactLeads = $contact->getLeads();
-        // $isHaveCompletedLeads = false;
-        // foreach ($contactLeads as $lead) {
-        //     $syncedLead = $leadsService->syncOne($lead);
-        //     $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
-        //     if ($isHaveCompletedLeads) {
-        //         break;
-        //     }
-        // }
-
-        // $customersService = $apiClient->customers();
-        // if ($isHaveCompletedLeads) {
-        //     $customer = new CustomerModel();
-        //     $customer->setName('Example')->setNextDate(time() + (4 * 24 * 60 * 60));
-        //     $links = new LinksCollection();
-        //     $links->add($contact);
-        //     $customer = $customersService->addOne($customer);
-        //     $customersService->link($customer, $links);
-        // // }
-        // $contactNotesService = $apiClient->notes(EntityTypesInterface::CONTACTS);
-        // $commonNote = new CommonNote();
-        // $commonNote->setText('примечание из Api')->setEntityId(10818759);
-        // $contactNotesService->addOne($commonNote);
-        // var_dump($contactNotesService->get());
-        // var_dump($contactService->get()->last());
         return view("amo.main");
     }
     public function store(Request $request)
@@ -240,8 +163,7 @@ class AmoCrmController extends Controller
             $task = new TaskModel();
             $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
                 ->setText('Новая задач из Api')
-                // TODO: Реализовать "только на «рабочее время» (пн-пт с 9 до 18)"
-                ->setCompleteTill(time() + (4 * 24 * 60 * 60))
+                ->setCompleteTill($this->getNextWorkingDayTime())
                 ->setEntityType(EntityTypesInterface::LEADS)
                 ->setEntityId($lead->getId())
                 ->setResponsibleUserId($lead->getResponsibleUserId());
@@ -386,5 +308,18 @@ class AmoCrmController extends Controller
         $users = $usersService->get()->toArray();
         $index = random_int(0, count($users) - 1);
         return $users[$index]['id'];
+    }
+    private function getNextWorkingDayTime()
+    {
+        $currentTimestamp = time();
+        $fourDaysLaterTimestamp = strtotime('+4 days', $currentTimestamp);
+        while (date('N', $fourDaysLaterTimestamp) >= 6) {
+            $fourDaysLaterTimestamp = strtotime('+1 day', $fourDaysLaterTimestamp);
+        }
+        $workingHoursStart = strtotime('09:00', $fourDaysLaterTimestamp);
+        if (date('H', $fourDaysLaterTimestamp) >= 18) {
+            $workingHoursStart = strtotime('09:00 +1 day', $fourDaysLaterTimestamp);
+        }
+        return $workingHoursStart;
     }
 }
