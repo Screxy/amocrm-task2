@@ -4,13 +4,15 @@ namespace App\Http\Controllers;
 
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Collections\CatalogElementsCollection;
-use AmoCRM\Models\ProductsSettingsModel;
+use AmoCRM\Filters\ContactsFilter;
+use AmoCRM\Models\NoteType\CommonNote;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\SelectCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\MultitextCustomFieldValueModel;
+use AmoCRM\Models\CustomFieldsValues\MultitextCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\MultitextCustomFieldValueCollection;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\NumericCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueCollections\NumericCustomFieldValueCollection;
@@ -22,6 +24,8 @@ use AmoCRM\Models\LeadModel;
 use AmoCRM\Collections\LinksCollection;
 use AmoCRM\Models\CompanyModel;
 use AmoCRM\Models\CatalogElementModel;
+use AmoCRM\Models\Customers\CustomerModel;
+
 
 class AmoCrmController extends Controller
 {
@@ -65,9 +69,10 @@ class AmoCrmController extends Controller
     }
     public function index()
     {
-        // $apiClient = $this->apiClient;
-        // $contactService = $apiClient->contacts();
-        // $leadsService = $apiClient->leads();
+        $apiClient = $this->apiClient;
+        $contactService = $apiClient->contacts();
+        $leadsService = $apiClient->leads();
+
         // $lead = $leadsService->getOne(6729965);
         // $linkService = $apiClient->links('leads');
         // $linksCollection = new LinksCollection();
@@ -86,84 +91,185 @@ class AmoCrmController extends Controller
         // $links->add($catalogElement);
         // $apiClient->leads()->link($lead, $links);
         // var_dump($catalogElementsService->get());
+
+        // пытался создать фильтр по номеру телефона, не получилось...
+        // $customFields = $contactService->getOne(11259657)->getCustomFieldsValues();
+        // $phoneField = $customFields->getBy('fieldCode', 'PHONE')->setValues(
+        //     (new MultitextCustomFieldValueCollection())
+        //         ->add(
+        //             (new MultitextCustomFieldValueModel())
+        //                 ->setEnum('WORK')
+        //                 ->setValue('9207499226')
+        //         )
+        // );
+        // $contactFilter = (new ContactsFilter())->setCustomFieldsValues(
+        //     [$phoneField]
+        // );
+        // var_dump($contactFilter->getCustomFieldsValues());
+        // $checkContact = $contactService->get($contactFilter);
+        // var_dump($checkContact);
+        // $phone = '9207499224';
+        // $checkContact = $contactService->get(null, ['leads']);
+        // $isContactDuplicate = false;
+        // foreach ($checkContact as $contactItem) {
+        //     //достать поле телефон
+        //     $contactPhone = $contactItem->getCustomFieldsValues()->getBy('fieldCode', 'PHONE')->getValues()->all()[0]->getValue();
+        //     $isContactDuplicate = $contactPhone === $phone;
+        //     if ($isContactDuplicate) {
+        //         $contact = $contactItem;
+        //         break;
+        //     }
+        // }
+        // //проверка на успешный статус сделок контакта
+        // $contactLeads = $contact->getLeads();
+        // $isHaveCompletedLeads = false;
+        // foreach ($contactLeads as $lead) {
+        //     $syncedLead = $leadsService->syncOne($lead);
+        //     $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
+        //     if ($isHaveCompletedLeads) {
+        //         break;
+        //     }
+        // }
+
+        // $customersService = $apiClient->customers();
+        // if ($isHaveCompletedLeads) {
+        //     $customer = new CustomerModel();
+        //     $customer->setName('Example')->setNextDate(time() + (4 * 24 * 60 * 60));
+        //     $links = new LinksCollection();
+        //     $links->add($contact);
+        //     $customer = $customersService->addOne($customer);
+        //     $customersService->link($customer, $links);
+        // // }
+        // $contactNotesService = $apiClient->notes(EntityTypesInterface::CONTACTS);
+        // $commonNote = new CommonNote();
+        // $commonNote->setText('примечание из Api')->setEntityId(10818759);
+        // $contactNotesService->addOne($commonNote);
+        // var_dump($contactNotesService->get());
+        // var_dump($contactService->get()->last());
         return view("amo.main");
     }
     public function store(Request $request)
     {
-        // $request->validate([
-        //     'first_name' => 'required|string',
-        //     'last_name' => 'required|string',
-        //     'age' => 'required|numeric',
-        //     'gender' => 'required|string',
-        //     'phone' => 'required|numeric|digits:10',
-        //     'email' => 'required|email'
-        // ]);
-        // $first_name = $request->input('first_name');
-        // $last_name = $request->input('last_name');
-        // $age = $request->input('age');
-        // $gender = $request->input('gender');
-        // $phone = $request->input('phone');
-        // $email = $request->input('email');
+        $request->validate([
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'age' => 'required|numeric',
+            'gender' => 'required|string',
+            'phone' => 'required|numeric|digits:10',
+            'email' => 'required|email'
+        ]);
+        $first_name = $request->input('first_name');
+        $last_name = $request->input('last_name');
+        $age = $request->input('age');
+        $gender = $request->input('gender');
+        $phone = $request->input('phone');
+        $email = $request->input('email');
 
         $apiClient = $this->apiClient;
         $contactService = $apiClient->contacts();
         $leadsService = $apiClient->leads();
-        $productsService = $apiClient->products();
+        $customersService = $apiClient->customers();
+        //Проверка на дубль
+        $checkContact = $contactService->get(null, ['leads']);
+        $isContactDuplicate = false;
+        foreach ($checkContact as $contactItem) {
+            //достать поле телефон
+            $contactPhone = $contactItem->getCustomFieldsValues()->getBy('fieldCode', 'PHONE')->getValues()->all()[0]->getValue();
+            $isContactDuplicate = $contactPhone === $phone;
+            if ($isContactDuplicate) {
+                $contact = $contactItem;
+                break;
+            }
+        }
+        //Есть контакт имеет дубль
+        if ($isContactDuplicate) {
+            //проверка на успешный статус сделок контакта
+            $contactLeads = $contact->getLeads();
+            $isHaveCompletedLeads = false;
+            foreach ($contactLeads as $lead) {
+                $syncedLead = $leadsService->syncOne($lead);
+                $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
+                if ($isHaveCompletedLeads) {
+                    break;
+                }
+            }
+            if ($isHaveCompletedLeads) {
+                //создание покупателя
+                $customer = new CustomerModel();
+                $customer->setName('Покупатель из Api')->setNextDate(time() + (4 * 24 * 60 * 60));
+                $links = new LinksCollection();
+                $links->add($contact);
+                $customer = $customersService->addOne($customer);
+                $customersService->link($customer, $links);
+            } else {
+                //создание примечания
+                $contactNotesService = $apiClient->notes(EntityTypesInterface::CONTACTS);
+                $commonNote = new CommonNote();
+                $commonNote->setText('Была попытка создать дубль контакта')->setEntityId($contact->getId());
+                $contactNotesService->addOne($commonNote);
+            }
+        } else {
+            //если дубля нет, создаем новый контакт, сделку, задачу
+            $contact = new ContactModel();
+            //установить кастомные поля как у других контактов
+            $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
+            $this->setContactName($contact, $first_name, $last_name);
+            $this->setContactAge($contact, $age);
+            $this->setContactGender($contact, $gender);
+            $this->setContactNumber($contact, $phone);
+            $this->setContactEmail($contact, $email);
+            $apiClient->contacts()->addOne($contact);
 
-        // $contact = new ContactModel();
-        // //установить кастомные поля как у других контактов
-        // $contact->setCustomFieldsValues($contactService->getOne('11259657')->getCustomFieldsValues());
-        // $this->setContactName($contact, $first_name, $last_name);
-        // $this->setContactAge($contact, $age);
-        // $this->setContactGender($contact, $gender);
-        // $this->setContactNumber($contact, $phone);
-        // $this->setContactEmail($contact, $email);
-        // $apiClient->contacts()->addOne($contact);
+            // // Для тестов, чтобы не создавать контакт
+            // $contact = $contactService->getOne('11259657');
 
-        // Для тестов, чтобы не создавать контакт
-        $contact = $contactService->getOne('11259657');
+            // Создаем сделку
+            $lead = new LeadModel();
+            $lead->setName('Тестовая сделка из Api2')
+                ->setPrice(999)
+                ->setContacts(
+                    (new ContactsCollection())
+                        ->add(
+                            $contact
+                        )
+                )->setResponsibleUserId($this->getRandomUserId());
+            $leadsService->addOne($lead);
 
-        $lead = new LeadModel();
-        $lead->setName('Тестовая сделка из Api2')
-            ->setPrice(999)
-            ->setContacts(
-                (new ContactsCollection())
-                    ->add(
-                        $contact
-                    )
-            )->setResponsibleUserId($this->getRandomUserId());
-        $leadsService->addOne($lead);
+            // создаем задачу
+            $tasksService = $apiClient->tasks();
+            $task = new TaskModel();
+            $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
+                ->setText('Новая задач из Api')
+                // TODO: Реализовать "только на «рабочее время» (пн-пт с 9 до 18)"
+                ->setCompleteTill(time() + (4 * 24 * 60 * 60))
+                ->setEntityType(EntityTypesInterface::LEADS)
+                ->setEntityId($lead->getId())
+                ->setResponsibleUserId($lead->getResponsibleUserId());
+            $tasksService->addOne($task);
 
-        $tasksService = $apiClient->tasks();
-        $task = new TaskModel();
-        $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
-            ->setText('Новая задач из Api')
-            // TODO: Реализовать "только на «рабочее время» (пн-пт с 9 до 18)"
-            ->setCompleteTill(time() + (4 * 24 * 60 * 60))
-            ->setEntityType(EntityTypesInterface::LEADS)
-            ->setEntityId($lead->getId())
-            ->setResponsibleUserId($lead->getResponsibleUserId());
-        $tasksService->addOne($task);
+            $catalogsService = $apiClient->catalogs();
+            $catalogsCollection = $catalogsService->get();
+            $catalog = $catalogsCollection->getBy('name', 'Товары');
 
-        $catalogsService = $apiClient->catalogs();
-        $catalogsCollection = $catalogsService->get();
-        $catalog = $catalogsCollection->getBy('name', 'Товары');
+            //сервис элементов товаров
+            $catalogElementsService = $apiClient->catalogElements($catalog->getId());
 
-        //сервис элементов товаров
-        $catalogElementsService = $apiClient->catalogElements($catalog->getId());
-        $catalogElementCollection = new CatalogElementsCollection();
-        $catalogElement = new CatalogElementModel();
-        $catalogElement->setName('Новый товар из Api');
-        $catalogElement2 = new CatalogElementModel();
-        $catalogElement2->setName('Новый товар из Api 2');
-        $catalogElementCollection->add($catalogElement)->add($catalogElement2);
-        $catalogElementsService->add($catalogElementCollection);
-        
-        //привязываем товары к сделке
-        $links = new LinksCollection();
-        $links->add($catalogElement);
-        $links->add($catalogElement2);
-        $leadsService->link($lead, $links);
+            // создаем и добавляем товары
+            $catalogElementCollection = new CatalogElementsCollection();
+            $catalogElement = new CatalogElementModel();
+            $catalogElement->setName('Новый товар из Api');
+            $catalogElement2 = new CatalogElementModel();
+            $catalogElement2->setName('Новый товар из Api 2');
+            $catalogElementCollection->add($catalogElement)->add($catalogElement2);
+            $catalogElementsService->add($catalogElementCollection);
+
+            //привязываем товары к сделке
+            $links = new LinksCollection();
+            $links->add($catalogElement);
+            $links->add($catalogElement2);
+            $leadsService->link($lead, $links);
+
+        }
         return response()->json([
             'message' => 'ok',
         ], 201);
