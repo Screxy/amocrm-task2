@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
@@ -26,10 +27,10 @@ use AmoCRM\Models\CompanyModel;
 use AmoCRM\Models\CatalogElementModel;
 use AmoCRM\Models\Customers\CustomerModel;
 
-
 class AmoCrmController extends Controller
 {
     private $apiClient;
+
     public function __construct()
     {
         $clientId = config('amocrm.client_id');
@@ -67,10 +68,12 @@ class AmoCrmController extends Controller
                 }
             );
     }
+    
     public function index()
     {
         return view("amo.main");
     }
+    
     public function store(Request $request)
     {
         $request->validate([
@@ -79,13 +82,13 @@ class AmoCrmController extends Controller
             'age' => 'required|numeric',
             'gender' => 'required|string',
             'phone' => 'required|numeric|digits:10',
-            'email' => 'required|email'
+            'email' => 'required|email',
         ]);
-        $first_name = $request->input('first_name');
-        $last_name = $request->input('last_name');
-        $age = $request->input('age');
+        $firstName = $request->input('first_name');
+        $lastName = $request->input('last_name');
+        $age = (int)($request->input('age'));
         $gender = $request->input('gender');
-        $phone = $request->input('phone');
+        $phone = (int)($request->input('phone'));
         $email = $request->input('email');
 
         $apiClient = $this->apiClient;
@@ -135,16 +138,14 @@ class AmoCrmController extends Controller
             //если дубля нет, создаем новый контакт, сделку, задачу
             $contact = new ContactModel();
             //установить кастомные поля как у других контактов
+            // TODO: "Считаю шаг с получением кастомных полей лишним, он не нужен, нужно исправить"
             $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
-            $this->setContactName($contact, $first_name, $last_name);
+            $this->setContactName($contact, $firstName, $lastName);
             $this->setContactAge($contact, $age);
             $this->setContactGender($contact, $gender);
             $this->setContactNumber($contact, $phone);
             $this->setContactEmail($contact, $email);
             $apiClient->contacts()->addOne($contact);
-
-            // // Для тестов, чтобы не создавать контакт
-            // $contact = $contactService->getOne('11259657');
 
             // Создаем сделку
             $lead = new LeadModel();
@@ -171,6 +172,7 @@ class AmoCrmController extends Controller
 
             $catalogsService = $apiClient->catalogs();
             $catalogsCollection = $catalogsService->get();
+            // TODO: "Сейчас не критично, но доставать по названию не очень надежно. У каталога с товарами есть свой тип, поэтому лучше доставать по нему"
             $catalog = $catalogsCollection->getBy('name', 'Товары');
 
             //сервис элементов товаров
@@ -193,9 +195,12 @@ class AmoCrmController extends Controller
 
         }
         return response()->json([
+            // TODO: "По-хорошему для статуса ответа лучше использовать константы"
             'message' => 'ok',
         ], 201);
     }
+    
+    // TODO: "Это что? Исправляй"
     private function saveToken(array $accessToken)
     { {
             if (
@@ -218,6 +223,7 @@ class AmoCrmController extends Controller
             }
         }
     }
+    // TODO: "Ну тут тоже уже знакомый коммент"
     private function getToken()
     {
         if (!file_exists('token.json')) {
@@ -243,6 +249,7 @@ class AmoCrmController extends Controller
             exit('Invalid access token ' . var_export($accessToken, true));
         }
     }
+    
     private function setContactNumber(ContactModel $contact, int $value)
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
@@ -254,8 +261,8 @@ class AmoCrmController extends Controller
         );
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
-        // $this->apiClient->contacts()->updateOne($contact);
     }
+    
     private function setContactEmail(ContactModel $contact, string $value)
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
@@ -267,18 +274,18 @@ class AmoCrmController extends Controller
         );
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
-        // $this->apiClient->contacts()->updateOne($contact);
     }
-    private function setContactName(ContactModel $contact, string $first_name, string $last_name)
+    
+    private function setContactName(ContactModel $contact, string $firstName, string $lastName)
     {
-        $contact->setFirstName($first_name)->setLastName($last_name);
+        $contact->setFirstName($firstName)->setLastName($lastName);
         return $contact;
-        // $this->apiClient->contacts()->updateOne($contact);
     }
+    
     private function setContactAge(ContactModel $contact, int $value)
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
-        //изменить поле email
+        //изменить поле age
         $contactCustomFields->getBy('fieldName', 'Возраст')->setValues(
             (new NumericCustomFieldValueCollection())->add(
                 (new NumericCustomFieldValueModel())->setValue($value)
@@ -286,8 +293,8 @@ class AmoCrmController extends Controller
         );
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
-        // $this->apiClient->contacts()->updateOne($contact);
     }
+    
     private function setContactGender(ContactModel $contact, string $value)
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
@@ -299,8 +306,8 @@ class AmoCrmController extends Controller
         );
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
-        // $this->apiClient->contacts()->updateOne($contact);
     }
+    
     private function getRandomUserId()
     {
         $apiClient = $this->apiClient;
@@ -309,6 +316,7 @@ class AmoCrmController extends Controller
         $index = random_int(0, count($users) - 1);
         return $users[$index]['id'];
     }
+    
     private function getNextWorkingDayTime()
     {
         $currentTimestamp = time();
