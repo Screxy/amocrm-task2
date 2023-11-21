@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Collections\CatalogElementsCollection;
-use AmoCRM\Filters\ContactsFilter;
+use AmoCRM\Collections\CustomFieldsValuesCollection;
+use AmoCRM\Models\CustomFieldsValues\NumericCustomFieldValuesModel;
+use AmoCRM\Models\CustomFieldsValues\SelectCustomFieldValuesModel;
 use AmoCRM\Models\NoteType\CommonNote;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use AmoCRM\Helpers\EntityTypesInterface;
@@ -23,12 +26,15 @@ use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\LeadModel;
 use AmoCRM\Collections\LinksCollection;
-use AmoCRM\Models\CompanyModel;
 use AmoCRM\Models\CatalogElementModel;
 use AmoCRM\Models\Customers\CustomerModel;
+use \Illuminate\Contracts\View\View;
+
 
 class AmoCrmController extends Controller
 {
+    const STATUS_CODE_CREATED = 201;
+
     private $apiClient;
 
     public function __construct()
@@ -68,13 +74,13 @@ class AmoCrmController extends Controller
                 }
             );
     }
-    
-    public function index()
+
+    public function index(): View
     {
         return view("amo.main");
     }
-    
-    public function store(Request $request)
+
+    public function store(Request $request): JsonResponse
     {
         $request->validate([
             'first_name' => 'required|string',
@@ -86,9 +92,9 @@ class AmoCrmController extends Controller
         ]);
         $firstName = $request->input('first_name');
         $lastName = $request->input('last_name');
-        $age = (int)($request->input('age'));
+        $age = $request->input('age');
         $gender = $request->input('gender');
-        $phone = (int)($request->input('phone'));
+        $phone = $request->input('phone');
         $email = $request->input('email');
 
         $apiClient = $this->apiClient;
@@ -107,16 +113,18 @@ class AmoCrmController extends Controller
                 break;
             }
         }
-        //Есть контакт имеет дубль
+        //Если контакт имеет дубль
         if ($isContactDuplicate) {
             //проверка на успешный статус сделок контакта
             $contactLeads = $contact->getLeads();
             $isHaveCompletedLeads = false;
-            foreach ($contactLeads as $lead) {
-                $syncedLead = $leadsService->syncOne($lead);
-                $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
-                if ($isHaveCompletedLeads) {
-                    break;
+            if (!empty($contactLeads)) {
+                foreach ($contactLeads as $lead) {
+                    $syncedLead = $leadsService->syncOne($lead);
+                    $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
+                    if ($isHaveCompletedLeads) {
+                        break;
+                    }
                 }
             }
             if ($isHaveCompletedLeads) {
@@ -137,13 +145,10 @@ class AmoCrmController extends Controller
         } else {
             //если дубля нет, создаем новый контакт, сделку, задачу
             $contact = new ContactModel();
-            //установить кастомные поля как у других контактов
-            // TODO: "Считаю шаг с получением кастомных полей лишним, он не нужен, нужно исправить"
-            $contact->setCustomFieldsValues($contactService->get()->last()->getCustomFieldsValues());
             $this->setContactName($contact, $firstName, $lastName);
             $this->setContactAge($contact, $age);
             $this->setContactGender($contact, $gender);
-            $this->setContactNumber($contact, $phone);
+            $this->setContactPhone($contact, $phone);
             $this->setContactEmail($contact, $email);
             $apiClient->contacts()->addOne($contact);
 
@@ -167,13 +172,13 @@ class AmoCrmController extends Controller
                 ->setCompleteTill($this->getNextWorkingDayTime())
                 ->setEntityType(EntityTypesInterface::LEADS)
                 ->setEntityId($lead->getId())
+                ->setDuration(60 * 60 * 9)
                 ->setResponsibleUserId($lead->getResponsibleUserId());
             $tasksService->addOne($task);
 
             $catalogsService = $apiClient->catalogs();
             $catalogsCollection = $catalogsService->get();
-            // TODO: "Сейчас не критично, но доставать по названию не очень надежно. У каталога с товарами есть свой тип, поэтому лучше доставать по нему"
-            $catalog = $catalogsCollection->getBy('name', 'Товары');
+            $catalog = $catalogsCollection->getBy('catalogType', 'products');
 
             //сервис элементов товаров
             $catalogElementsService = $apiClient->catalogElements($catalog->getId());
@@ -195,13 +200,11 @@ class AmoCrmController extends Controller
 
         }
         return response()->json([
-            // TODO: "По-хорошему для статуса ответа лучше использовать константы"
             'message' => 'ok',
-        ], 201);
+        ], self::STATUS_CODE_CREATED);
     }
-    
-    // TODO: "Это что? Исправляй"
-    private function saveToken(array $accessToken)
+
+    private function saveToken(array $accessToken): void
     { {
             if (
                 isset($accessToken)
@@ -223,8 +226,7 @@ class AmoCrmController extends Controller
             }
         }
     }
-    // TODO: "Ну тут тоже уже знакомый коммент"
-    private function getToken()
+    private function getToken(): AccessToken
     {
         if (!file_exists('token.json')) {
             exit('Access token file not found');
@@ -249,65 +251,114 @@ class AmoCrmController extends Controller
             exit('Invalid access token ' . var_export($accessToken, true));
         }
     }
-    
-    private function setContactNumber(ContactModel $contact, int $value)
+
+    private function setContactPhone(ContactModel $contact, string $value): ContactModel
     {
+
         $contactCustomFields = $contact->getCustomFieldsValues();
         //изменить поле телефон
-        $contactCustomFields->getBy('fieldCode', 'PHONE')->setValues(
-            (new MultitextCustomFieldValueCollection())->add(
-                (new MultitextCustomFieldValueModel())->setValue($value)
-            )
-        );
+        if (!empty($contactCustomFields)) {
+            $contactCustomFields->add(
+                (new NumericCustomFieldValuesModel())->setFieldId(1240825)->setFieldName('Телефон')->setValues(
+                    (new MultitextCustomFieldValueCollection())->add(
+                        (new MultitextCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        } else {
+            $contactCustomFields = (new CustomFieldsValuesCollection())->add(
+                (new NumericCustomFieldValuesModel())->setFieldId(1240825)->setFieldName('Телефон')->setValues(
+                    (new MultitextCustomFieldValueCollection())->add(
+                        (new MultitextCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        }
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
     }
-    
-    private function setContactEmail(ContactModel $contact, string $value)
+
+    private function setContactEmail(ContactModel $contact, string $value): ContactModel
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
         //изменить поле email
-        $contactCustomFields->getBy('fieldCode', 'EMAIL')->setValues(
-            (new MultitextCustomFieldValueCollection())->add(
-                (new MultitextCustomFieldValueModel())->setValue($value)
-            )
-        );
+        if (!empty($contactCustomFields)) {
+            $contactCustomFields->add(
+                (new MultitextCustomFieldValuesModel())->setFieldId(1240827)->setFieldName('Email')->setValues(
+                    (new MultitextCustomFieldValueCollection())->add(
+                        (new MultitextCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        } else {
+            $contactCustomFields = (new CustomFieldsValuesCollection())->add(
+                (new MultitextCustomFieldValuesModel())->setFieldId(1240827)->setFieldName('Email')->setValues(
+                    (new MultitextCustomFieldValueCollection())->add(
+                        (new MultitextCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        }
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
     }
-    
-    private function setContactName(ContactModel $contact, string $firstName, string $lastName)
+
+    private function setContactName(ContactModel $contact, string $firstName, string $lastName): ContactModel
     {
         $contact->setFirstName($firstName)->setLastName($lastName);
         return $contact;
     }
-    
-    private function setContactAge(ContactModel $contact, int $value)
+
+    private function setContactAge(ContactModel $contact, string $value): ContactModel
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
         //изменить поле age
-        $contactCustomFields->getBy('fieldName', 'Возраст')->setValues(
-            (new NumericCustomFieldValueCollection())->add(
-                (new NumericCustomFieldValueModel())->setValue($value)
-            )
-        );
+        if (!empty($contactCustomFields)) {
+            $contactCustomFields->add(
+                (new NumericCustomFieldValuesModel())->setFieldId(1345287)->setFieldName('Возраст')->setValues(
+                    (new NumericCustomFieldValueCollection())->add(
+                        (new NumericCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        } else {
+            $contactCustomFields = (new CustomFieldsValuesCollection())->add(
+                (new NumericCustomFieldValuesModel())->setFieldId(1345287)->setFieldName('Возраст')->setValues(
+                    (new NumericCustomFieldValueCollection())->add(
+                        (new NumericCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        }
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
     }
-    
-    private function setContactGender(ContactModel $contact, string $value)
+
+    private function setContactGender(ContactModel $contact, string $value): ContactModel
     {
         $contactCustomFields = $contact->getCustomFieldsValues();
-        //изменить поле email
-        $contactCustomFields->getBy('fieldName', 'Пол')->setValues(
-            (new SelectCustomFieldValueCollection())->add(
-                (new SelectCustomFieldValueModel())->setValue($value)
-            )
-        );
+        //изменить поле пол
+        if (!empty($contactCustomFields)) {
+            $contactCustomFields->add(
+                (new SelectCustomFieldValuesModel())->setFieldId(1345279)->setFieldName('Пол')->setValues(
+                    (new SelectCustomFieldValueCollection())->add(
+                        (new SelectCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        } else {
+            $contactCustomFields = (new CustomFieldsValuesCollection())->add(
+                (new SelectCustomFieldValuesModel())->setFieldId(1345279)->setFieldName('Пол')->setValues(
+                    (new SelectCustomFieldValueCollection())->add(
+                        (new SelectCustomFieldValueModel())->setValue($value)
+                    )
+                )
+            );
+        }
         $contact->setCustomFieldsValues($contactCustomFields);
         return $contact;
     }
-    
+
     private function getRandomUserId()
     {
         $apiClient = $this->apiClient;
@@ -316,18 +367,17 @@ class AmoCrmController extends Controller
         $index = random_int(0, count($users) - 1);
         return $users[$index]['id'];
     }
-    
+
     private function getNextWorkingDayTime()
     {
+        date_default_timezone_set('Europe/Moscow');
+
         $currentTimestamp = time();
         $fourDaysLaterTimestamp = strtotime('+4 days', $currentTimestamp);
         while (date('N', $fourDaysLaterTimestamp) >= 6) {
             $fourDaysLaterTimestamp = strtotime('+1 day', $fourDaysLaterTimestamp);
         }
         $workingHoursStart = strtotime('09:00', $fourDaysLaterTimestamp);
-        if (date('H', $fourDaysLaterTimestamp) >= 18) {
-            $workingHoursStart = strtotime('09:00 +1 day', $fourDaysLaterTimestamp);
-        }
         return $workingHoursStart;
     }
 }
