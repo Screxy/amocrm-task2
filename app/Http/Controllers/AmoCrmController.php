@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Http\Controllers;
@@ -28,14 +29,15 @@ use AmoCRM\Models\LeadModel;
 use AmoCRM\Collections\LinksCollection;
 use AmoCRM\Models\CatalogElementModel;
 use AmoCRM\Models\Customers\CustomerModel;
+use AmoCRM\Collections\Leads\LeadsCollection;
 use \Illuminate\Contracts\View\View;
 
 
 class AmoCrmController extends Controller
 {
-    const STATUS_CODE_CREATED = 201;
+    public const STATUS_CODE_CREATED = 201;
 
-    private $apiClient;
+    private AmoCRMApiClient $apiClient;
 
     public function __construct()
     {
@@ -101,6 +103,11 @@ class AmoCrmController extends Controller
         $contactService = $apiClient->contacts();
         $leadsService = $apiClient->leads();
         $customersService = $apiClient->customers();
+        /**
+         * Проверка на дубль контакта.
+         *
+         * @var ContactsCollection $checkContact
+         */
         //Проверка на дубль
         $checkContact = $contactService->get(null, ['leads']);
         $isContactDuplicate = false;
@@ -116,12 +123,17 @@ class AmoCrmController extends Controller
         //Если контакт имеет дубль
         if ($isContactDuplicate) {
             //проверка на успешный статус сделок контакта
+            /**
+             * Проверка на дубль контакта.
+             *
+             * @var LeadsCollection $contactLeads
+             */
             $contactLeads = $contact->getLeads();
             $isHaveCompletedLeads = false;
             if (!empty($contactLeads)) {
                 foreach ($contactLeads as $lead) {
                     $syncedLead = $leadsService->syncOne($lead);
-                    $isHaveCompletedLeads = $syncedLead->getStatusId() === 142;
+                    $isHaveCompletedLeads = $syncedLead->getStatusId() === LeadModel::WON_STATUS_ID;
                     if ($isHaveCompletedLeads) {
                         break;
                     }
@@ -359,7 +371,7 @@ class AmoCrmController extends Controller
         return $contact;
     }
 
-    private function getRandomUserId()
+    private function getRandomUserId(): int
     {
         $apiClient = $this->apiClient;
         $usersService = $apiClient->users();
@@ -368,7 +380,7 @@ class AmoCrmController extends Controller
         return $users[$index]['id'];
     }
 
-    private function getNextWorkingDayTime()
+    private function getNextWorkingDayTime(): int
     {
         date_default_timezone_set('Europe/Moscow');
 
